@@ -20,7 +20,7 @@ func add_page(page_data: PageData) -> void:
 	var save_error: Error = ResourceSaver.save(page_data)
 	if not save_error == OK:
 		printerr("Save error %s relative to path: %s" % [save_error, _resource_path])
-	pages[page_data.designation.get_string() + "_" + page_data.name] = page_data
+	pages[page_data.get_full_name()] = page_data
 	page_data.project_data = weakref(self)
 	page_added.emit(page_data)
 	page_data.name_changed.connect(_on_page_data_name_changed.bind(page_data.name, page_data), CONNECT_PERSIST)
@@ -40,3 +40,8 @@ func _on_page_data_name_changed(old_name: StringName, page_data: PageData) -> vo
 	page_data.take_over_path(new_path)
 	ResourceSaver.save(self)
 	page_data.name_changed.connect(_on_page_data_name_changed.bind(page_data.name, page_data), CONNECT_ONE_SHOT)
+
+
+func delete_pages(page_datas: Array[PageData]) -> void:
+	for page_data: PageData in page_datas:
+		pages.erase(page_data.get_full_name())

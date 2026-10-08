@@ -17,9 +17,10 @@ var state: State = State.VIEWING: ## The current [enum State].
 @onready var contents_layer: CanvasLayer = %ContentsLayer ## Reference to contents layer that holds [member PageData.contents].
 @onready var selection_manager: SelectionManager = %SelectionManager ## Reference to [SelectionManager].
 @onready var grid: Grid = %Grid ## Reference to [Grid].
-@onready var viewport_camera: VewportCamera = %ViewportCamera ## Reference to [ViewportCamera].
+@onready var viewport_camera: ViewportCamera = %ViewportCamera ## Reference to [ViewportCamera].
 @onready var edit_properties_dialog: PropertiesDialog = %EditPropertiesDialog ## Dialog that is used to edit the properties of the selected contents.
 @onready var reset_vew_button: Button = %ResetVewButton ## Button for resetting the canvas transform of the viewport.
+@onready var context_menu: PageViewportContextMenu = %PageViewportContextMenu
 
 
 func _ready() -> void:
@@ -27,12 +28,21 @@ func _ready() -> void:
 	if page_data:
 		_update_page_viewport()
 	reset_vew_button.pressed.connect(reset_view)
+	context_menu.hide()
+	context_menu.index_pressed.connect(_on_context_menu_index_pressed)
 
 
-func _input(event: InputEvent) -> void:
+func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action(&"open_properties") and event.is_pressed():
 		edit_properties_dialog.activate()
 		get_viewport().set_input_as_handled()
+
+
+func _gui_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton:
+		var mouse_button_event: InputEventMouseButton = event
+		if mouse_button_event.button_index == MouseButton.MOUSE_BUTTON_RIGHT:
+			show_context_menu()
 
 
 #region setters/getters
@@ -47,9 +57,10 @@ func set_page_data(_page_data: PageData) -> void:
 	page_data = _page_data
 	if is_node_ready():
 		_update_page_viewport()
-	project_data = page_data.project_data.get_ref()
-	page_data.grid_interval_changed.connect(_on_page_data_grid_interval_changed)
-	project_data.closed.connect(_on_project_data_closed)
+	if page_data.project_data:
+		project_data = page_data.project_data.get_ref()
+		page_data.grid_interval_changed.connect(_on_page_data_grid_interval_changed)
+		project_data.closed.connect(_on_project_data_closed)
 	if not page_data.changed.is_connected(_on_page_data_changed):
 		page_data.changed.connect(_on_page_data_changed)
 
@@ -92,19 +103,6 @@ func add_graphics(graphics: Node) -> void:
 	graphics.owner = contents_layer
 
 
-func _set_can_select(can_select: bool) -> void:
-	selection_manager.can_select = can_select
-
-
-func _set_layout_size(page_size: Vector2) -> void:
-	var layout_size: Vector2
-	layout_size.x = Units.mm_to_px(page_size.x)
-	layout_size.y = Units.mm_to_px(page_size.y)
-	if layout:
-		layout.custom_maximum_size = layout_size
-		layout.size = layout_size
-
-
 ## Returns the possible place position takin into account grid if it is visible.
 func get_place_position() -> Vector2:
 	var interval: Vector2 = Vector2(Units.mm_to_px(grid.interval), Units.mm_to_px(grid.interval))
@@ -127,6 +125,28 @@ func pack_contents() -> PackedScene:
 ## Resets the canvas transform of the viewport.
 func reset_view() -> void:
 	viewport_camera.viewport.canvas_transform = Transform2D.IDENTITY
+
+
+func show_context_menu() -> void:
+	context_menu.position = get_global_mouse_position()
+	if get_tree().get_first_node_in_group(&"selection"):
+		context_menu.show_items(context_menu.GRAPHICS_SELECTED_ITEMS)
+	else:
+		context_menu.show_items(context_menu.NO_SELECTION_ITEMS)
+	context_menu.show()
+
+
+func _set_can_select(can_select: bool) -> void:
+	selection_manager.can_select = can_select
+
+
+func _set_layout_size(page_size: Vector2) -> void:
+	var layout_size: Vector2
+	layout_size.x = Units.mm_to_px(page_size.x)
+	layout_size.y = Units.mm_to_px(page_size.y)
+	if layout:
+		layout.custom_maximum_size = layout_size
+		layout.size = layout_size
 
 
 func _add_poly_line_2d(poly_line_2d: PolyLine2D) -> void:
@@ -175,7 +195,7 @@ func _add_contents(contents: PackedScene) -> void:
 		child.owner = null
 		child.reparent(contents_layer)
 		child.owner = contents_layer
-		child.set(&"page_viewport", self)
+		child.set(&"_page_viewport", self)
 	new_contents.queue_free()
 
 
@@ -200,3 +220,7 @@ func _on_project_data_closed() -> void:
 
 func _on_page_data_changed() -> void:
 	name = page_data.name + " " + page_data.description
+
+
+func _on_context_menu_index_pressed(index: int) -> void:
+	print(context_menu.get_item_text(index))
